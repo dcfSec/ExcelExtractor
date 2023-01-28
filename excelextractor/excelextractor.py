@@ -47,20 +47,7 @@ class ExcelExtractor:
         :raises FileNotFoundError: Raises if the file can't be found
         :raises ValueError: Raises if the file is not in the correct format
         """
-        self.file = document
-        self.newFile = newFile
-        if newFile is True:
-            self.doc = Workbook()
-            self.sheet = self.doc.active
-        else:
-            try:
-                self.doc = load_workbook(filename=document)
-            except PermissionError:
-                raise PermissionError('Error: Can\'t open file. Permission denied: \'%s\'' % self.file)
-            except FileNotFoundError:
-                raise FileNotFoundError('Error: Can\'t open file. Not found: \'%s\'' % self.file)
-            except InvalidFileException:
-                raise ValueError('Given file format is not supported. Supported formats are: .xlsx,.xlsm,.xltx,.xltm')
+
         self.sheetTitle = None
         self.sheet = None
         self.header = {}
@@ -71,6 +58,22 @@ class ExcelExtractor:
         self.lastColumn = 0
 
         self.warnings = []
+
+        self.file = document
+        self.newFile = newFile
+        if newFile is True:
+            self.doc = Workbook()
+            self.sheet = self.doc.active
+            self.headerRow = 0
+        else:
+            try:
+                self.doc = load_workbook(filename=document)
+            except PermissionError:
+                raise PermissionError(f'Error: Can\'t open file. Permission denied: \'{self.file}\'')
+            except FileNotFoundError:
+                raise FileNotFoundError(f'Error: Can\'t open file. Not found: \'{self.file}\'')
+            except InvalidFileException:
+                raise ValueError('Given file format is not supported. Supported formats are: .xlsx,.xlsm,.xltx,.xltm')
 
     def setSheetTitle(self, title):
         """
@@ -100,7 +103,7 @@ class ExcelExtractor:
             self.sheet = self.doc[name]
             self.sheetTitle = name
         else:
-            raise KeyError('Sheetname \'%s\' not found' % name)
+            raise KeyError(f'Sheetname \'{name}\' not found')
 
     def setSheetFromId(self, sheetID):
         """
@@ -116,7 +119,7 @@ class ExcelExtractor:
             self.sheetTitle = self.doc.sheetnames[sheetID]
             self.sheet = self.doc[self.sheetTitle]
         else:
-            raise KeyError('SheetID \'%s\' not found' % sheetID)
+            raise KeyError(f'SheetID \'{sheetID}\' not found')
 
     def findHeaderRow(self):
         """
@@ -160,7 +163,7 @@ class ExcelExtractor:
         if header.strip().lower() not in self.header.keys():
             self.header[header.strip().lower()] = [header, None, clean, default, errorLevel, [], width]  # @TODO: Check params
         else:
-            raise ValueError('%s already as header set' % header)
+            raise ValueError(f'{header} already as header set')
 
     def addCleanPatternToHeader(self, header, pattern, replace):
         """
@@ -182,9 +185,9 @@ class ExcelExtractor:
                 re.compile(pattern)
                 self.header[header.strip().lower()][5].append((pattern, replace))
             except re.error:
-                raise ValueError('\'%s\' is not a valid regex pattern' % pattern)
+                raise ValueError(f'\'{pattern}\' is not a valid regex pattern')
         else:
-            raise KeyError('%s not in header list' % header)
+            raise KeyError(f'{header} not in header list')
 
     def findHeaderColumns(self, append=False):
         """
@@ -203,7 +206,7 @@ class ExcelExtractor:
                 if self.header[x.value.strip().lower()][1] is None:
                     self.header[x.value.strip().lower()][1] = x
                 else:
-                    raise ValueError('Header %s more than once in the %s' % (x.value, self.file))
+                    raise ValueError(f'Header {x.value} more than once in the {self.file}')
         missingHeader = []  # @TODO: Fix last column
 
         for k, v in self.header.items():
@@ -213,7 +216,7 @@ class ExcelExtractor:
         if append is True:
             self.appendHeaders(missingHeader)
         elif len(missingHeader) != 0:
-            raise ValueError('Not all headers found in the document: %s' % missingHeader)
+            raise ValueError(f'Not all headers found in the document: {missingHeader}')
 
     def appendHeaders(self, missingHeaders):
         """
@@ -249,7 +252,7 @@ class ExcelExtractor:
         try:
             self.doc.save(self.file)
         except PermissionError:
-            raise PermissionError('Error: Can\'t save file. Permission denied: \'%s\'' % self.file)
+            raise PermissionError(f'Error: Can\'t save file. Permission denied: \'{self.file}\'')
 
     def getCellValue(self, cell, clean=False, default='', errorLevel=0, patterns=[]):
         """
@@ -278,9 +281,9 @@ class ExcelExtractor:
         """
         if cell.value is None:
             if errorLevel == 2:
-                raise ValueError('Unhandled empty cell at: %s' % cell.coordinate)
+                raise ValueError(f'Unhandled empty cell at: {cell.coordinate}')
             elif errorLevel == 1:
-                self.warnings.append('Empty cell at %s filled with default: \'%s\'' % (cell.coordinate, default))
+                self.warnings.append(f'Empty cell at {cell.coordinate} filled with default: \'{default}\'')
             return str(default)
         else:
             if clean is True:
@@ -380,7 +383,7 @@ class ExcelExtractor:
         if rowID >= 0:
             return self.sheet[rowID+self.headerRow+1]
         else:
-            raise KeyError('Boundary exception for row ID: %s' % rowID)
+            raise KeyError(f'Boundary exception for row ID: {rowID}')
 
     def getRowFromRealRowID(self, rowID):
         """
@@ -491,9 +494,9 @@ class ExcelExtractor:
         """
         headerID = str(headerID).strip().lower()
         if headerID not in self.header.keys():
-            raise KeyError('Header ID %s not found' % headerID)
+            raise KeyError(f'Header ID {headerID} not found')
         if headerID in self.validators.keys():
-            raise ValueError('Header ID %s has already an validator' % headerID)
+            raise ValueError(f'Header ID {headerID} has already an validator')
 
         self.validators[headerID] = DataValidation(type=validatorType, formula1=formula, allow_blank=allowBlank)
         self.sheet.add_data_validation(self.validators[headerID])
@@ -524,7 +527,7 @@ class ExcelExtractor:
         for v in validatorList:
             self.validatorListWorksheet.cell(row=i, column=lastIndex, value=v)
             i += 1
-        return 'dropdown!$%s$%s:$%s$%s' % (cell.get_column_letter(lastIndex), 1, cell.get_column_letter(lastIndex), i-1)
+        return f'dropdown!${cell.get_column_letter(lastIndex)}$1:${cell.get_column_letter(lastIndex)}${i-1}'
 
     def addValidatorToCells(self, headerID):
         """
@@ -538,18 +541,18 @@ class ExcelExtractor:
 
         headerID = str(headerID).strip().lower()
         if headerID not in self.header.keys():
-            raise KeyError('Header ID %s not found' % headerID)
+            raise KeyError(f'Header ID {headerID} not found')
         if headerID not in self.validators.keys():
-            raise ValueError('Header ID %s has no validators' % headerID)
+            raise ValueError('Header ID {headerID} has no validators')
         for row in self.sheet:
             if row[0].row > self.headerRow:
                 self.validators[headerID].add(row[self.header[headerID][1].col_idx-1])
 
     def addFilter(self):
         """
-        Adds an filter in the header row
+        Adds a filter in the header row
         """
-        self.sheet.auto_filter.ref = "A%s:%s%s" % (self.headerRow, cell.get_column_letter(self.lastColumn), self.headerRow)
+        self.sheet.auto_filter.ref = f'A{self.headerRow}:{cell.get_column_letter(self.lastColumn)}{self.headerRow}'
 
     def setColumnWidth(self):
         """
