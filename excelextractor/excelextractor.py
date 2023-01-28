@@ -3,7 +3,6 @@ ExcelExtractor is an module to handle Excel documents in a normal table format f
 """
 
 import copy
-import json
 import re
 import warnings
 
@@ -25,7 +24,7 @@ class ExcelExtractor:
     Needed file Structure in Excel:
          |    A    |    B    |    C    | ....
          +---------+---------+---------+-------
-         | ... 
+         | ...
          +---------+---------+---------+-------
          | Header1 | Header2 | Header3 | ...
          +---------+---------+---------+-------
@@ -37,9 +36,9 @@ class ExcelExtractor:
     def __init__(self, document, newFile=False):
         """
         Constructs the ExcelExtractor class
-        
+
         Constructor loads the excel document. Only xlsx is supported
-        
+
         :param document: input file with path
         :type document: string
         :param newFile: If true a new file will be generated
@@ -49,11 +48,13 @@ class ExcelExtractor:
         :raises ValueError: Raises if the file is not in the correct format
         """
         self.file = document
+        self.newFile = newFile
         if newFile is True:
             self.doc = Workbook()
+            self.sheet = self.doc.active
         else:
             try:
-                self.doc = load_workbook(filename = document)
+                self.doc = load_workbook(filename=document)
             except PermissionError:
                 raise PermissionError('Error: Can\'t open file. Permission denied: \'%s\'' % self.file)
             except FileNotFoundError:
@@ -62,21 +63,35 @@ class ExcelExtractor:
                 raise ValueError('Given file format is not supported. Supported formats are: .xlsx,.xlsm,.xltx,.xltm')
         self.sheetTitle = None
         self.sheet = None
-        self.header = { }
+        self.header = {}
 
-        self.validators = { }
+        self.validators = {}
 
         self.headerRow = None
         self.lastColumn = 0
 
         self.warnings = []
 
+    def setSheetTitle(self, title):
+        """
+        Sets the sheet title for the current workbook
+
+        :param title: The new sheet title
+        :type title: string
+        :raises ValueError: Raises if there was no sheet selected
+        """
+        if self.sheet is not None:
+            self.sheetTitle = title
+            self.sheet.title = title
+        else:
+            raise ValueError('No sheet selected')
+
     def setSheetFromName(self, name):
         """
         Sets the worksheet from the sheetname
-        
+
         Uses the input name to set the worksheet for the data extraction. Raises an error if it fails
-        
+
         :param name: Excel worksheet name
         :type name: string
         :raises KeyError: Raises if the worksheetname is not found
@@ -90,9 +105,9 @@ class ExcelExtractor:
     def setSheetFromId(self, sheetID):
         """
         Sets the worksheet from the sheet ID
-        
+
         Uses the input ID to set the worksheet for the data extraction. Raises an error if it fails
-        
+
         :param name: Excel worksheet ID
         :type name: int
         :raises KeyError: Raises if the worksheet ID is not found
@@ -106,30 +121,30 @@ class ExcelExtractor:
     def findHeaderRow(self):
         """
         Finds the header row of the worksheet
-        
+
         Finds the header row of the worksheet. It searchs in column A for a cell with an defined header in it.
         The headers are stored in self.header
-        
+
         :raises ValueError: Raises if no header can be found
         """
         if self.headerRow is None:
-            for cell in self.sheet['A']:
-                if cell.value is not None and str(cell.value).strip().lower() in self.header.keys():
-                    self.headerRow = cell.row
+            for cellValue in self.sheet['A']:
+                if cellValue.value is not None and str(cellValue.value).strip().lower() in self.header.keys():
+                    self.headerRow = cellValue.row
                     return
             raise ValueError('Header row not found')
 
     def addHeader(self, header, clean=False, default='', errorLevel=0, width=0):
         """
         Adds an header to the header list
-        
+
         The set header are the headers where ExcelExtractor'll return values from.
         Here you can define cleaning patterns, default values and an errorLevel if the value in a cell is missing.
         Error level:
             0: No Error
-            1: Raises an Warning
-            2: Raises an ValueError
-        
+            1: Raises a Warning
+            2: Raises a ValueError
+
         :param header: Header name
         :type header: string
         :param clean: When set to true the cell value will be cleaned with the pattern defined in addCleanPatternToHeader(), defaults to False
@@ -143,23 +158,23 @@ class ExcelExtractor:
         :raises ValueError: Raises if the header is already set
         """
         if header.strip().lower() not in self.header.keys():
-            self.header[header.strip().lower()] = [header, None, clean, default, errorLevel, [], width] # @TODO: Check params
+            self.header[header.strip().lower()] = [header, None, clean, default, errorLevel, [], width]  # @TODO: Check params
         else:
             raise ValueError('%s already as header set' % header)
 
     def addCleanPatternToHeader(self, header, pattern, replace):
         """
         Adds an regex pattern to clean cell values
-        
+
         The added regex pattern cleans the cell value. You can define here more than one pattern for each header.
-        
+
         :param header: Name of the header
         :type header: string
         :param pattern: Regex pattern for the replacement
         :type pattern: string
         :param replace: Replacement for the pattern
         :type replace: string
-        :raises ValueError: Raises if the pattern is not a valid regex pattern  
+        :raises ValueError: Raises if the pattern is not a valid regex pattern
         :raises KeyError: Raises if the header is not in the header list
         """
         if header.strip().lower() in self.header.keys():
@@ -169,14 +184,14 @@ class ExcelExtractor:
             except re.error:
                 raise ValueError('\'%s\' is not a valid regex pattern' % pattern)
         else:
-            raise KeyError('%s not in header list' % header) 
-                
-    def findHeaderColumns(self, append = False):
+            raise KeyError('%s not in header list' % header)
+
+    def findHeaderColumns(self, append=False):
         """
         Finds the header columns for all headers in the header list
-        
+
         First the header row is searched, after that the function iterates through is row to find the header columns
-        
+
         :param append: If set to True the missing headers will be appended, defaults to False
         :param append: bool, optional
         :raises ValueError: Raises if there are more than one header with the same name in the document
@@ -189,27 +204,27 @@ class ExcelExtractor:
                     self.header[x.value.strip().lower()][1] = x
                 else:
                     raise ValueError('Header %s more than once in the %s' % (x.value, self.file))
-        missingHeader = [] # @TODO: Fix last column
-        
-        for k,v in self.header.items():
+        missingHeader = []  # @TODO: Fix last column
+
+        for k, v in self.header.items():
             if v[1] is None:
                 missingHeader.append(v[0])
 
-        if(append == True):
+        if append is True:
             self.appendHeaders(missingHeader)
         elif len(missingHeader) != 0:
             raise ValueError('Not all headers found in the document: %s' % missingHeader)
 
-    """
-    Appends missing headers to the header row
-    
-    :param missingHeaders: List of missing headers
-    :param missingHeaders: list, required
-    """    
     def appendHeaders(self, missingHeaders):
+        """
+        Appends missing headers to the header row
+
+        :param missingHeaders: List of missing headers
+        :param missingHeaders: list, required
+        """
         self.findHeaderRow()
         self.lastColumn = self.sheet.max_column
-        if(len(missingHeaders) == len(self.header)):
+        if len(missingHeaders) == len(self.header):
             self.lastColumn = 0
 
         for v in missingHeaders:
@@ -217,15 +232,14 @@ class ExcelExtractor:
             self.header[v.lower()][1] = self.sheet.cell(row=self.headerRow, column=self.lastColumn, value=v)
             self.header[v.lower()][1].font = Font(size=13, bold=True)
             self.header[v.lower()][1].alignment = Alignment(wrapText=True)
-        
 
     def save(self):
         """
         Saves the edited file
-        
+
         Saves the file to the disk. This overwrites the original file.
         Also adds the filter in the headline and the validators.
-        
+
         :raises PermissionError: Raises if the file can't be written
         """
         self.addFilter()
@@ -236,18 +250,18 @@ class ExcelExtractor:
             self.doc.save(self.file)
         except PermissionError:
             raise PermissionError('Error: Can\'t save file. Permission denied: \'%s\'' % self.file)
-        
+
     def getCellValue(self, cell, clean=False, default='', errorLevel=0, patterns=[]):
         """
         Gets the value of a cell
-        
+
         Gets the cell value from the given cell. Cleans up the cell if configured and sets an default
         value if the cell is empty. If an error level is set an warning or error will be raised.
         Error level:
             0: No Error
             1: Raises an Warning
             2: Raises an ValueError
-        
+
         :param cell: Cell object from the worksheet
         :type cell: openpyxl.cell.cell
         :param clean: If True cleans the cell with patterns, defaults to False
@@ -274,12 +288,12 @@ class ExcelExtractor:
             else:
                 return str(cell.value).strip()
 
-    def cleanCell(self, cell, patterns):
+    def cleanCell(self, cellValue, patterns):
         """
         Cleans the cell with an regex pattern
-        
+
         Cleans the cell with an dict of patterns
-        
+
         :param cell: cell value
         :type cell: string
         :param patterns: dict of patterns with key: value of pattern: replacement
@@ -288,16 +302,16 @@ class ExcelExtractor:
         :rtype: string
         """
         for pattern in patterns:
-            cell =  re.sub(pattern[0],pattern[1],str(cell))
-        return cell
+            cellValue = re.sub(pattern[0], pattern[1], str(cellValue))
+        return cellValue
 
     def getData(self):
         """
         Gets the data of the worksheet.
-        
+
         Gets the data of the worksheet as an list of dicts.
         A dict contains a key: value pair with headerName: cellValue
-        
+
         :return: Data of the worksheet
         :rtype: list
         """
@@ -311,22 +325,22 @@ class ExcelExtractor:
     def getRow(self, row):
         """
         Get all data of a single row
-        
+
         Returns all data of the given row.
-        
+
         :param row: Row to excract the data from
         :type row: tupel
         :return: Dict of the processed data
         :rtype: dict
         """
-        o = { }
+        o = {}
         filled = False
         for v in self.header.values():
             if row[v[1].col_idx-1].value is not None and row[v[1].col_idx-1].value != '':
                 filled = True
                 break
         if filled is True:
-            for k,v in self.header.items():
+            for k, v in self.header.items():
                 o[v[0]] = self.getCellValue(row[v[1].col_idx-1], v[2], v[3], v[4], v[5])
         else:
             o = None
@@ -335,9 +349,9 @@ class ExcelExtractor:
     def getRowData(self, rowID):
         """
         Get all data of a single row with the given ID
-        
+
         Returns all data of the given row ID.
-        
+
         :param row: Row ID to excract the data from
         :type row: tupel
         :return: Dict of the processed data
@@ -347,16 +361,16 @@ class ExcelExtractor:
         o = self.getRow(row)
         if o is None:
             o = {}
-            for k,v in self.header.items():
+            for k, v in self.header.items():
                 o[v[0]] = None
         return o
 
     def getRowFromID(self, rowID):
         """
         Gets the source row from an row ID
-        
+
         Gets the source row from the given row ID.
-        
+
         :param rowID: Row id. Relative to the header row. Starts at 0.
         :type rowID: int
         :raises KeyError: Raises if the row ID is not valid
@@ -371,7 +385,7 @@ class ExcelExtractor:
     def getRowFromRealRowID(self, rowID):
         """
         Gets raw source row data with an absolute ID
-                
+
         :param rowID: Absolute row ID
         :type rowID: int
         :return: Raw source row
@@ -383,7 +397,7 @@ class ExcelExtractor:
     def getAbsoluteRowID(self, rowID):
         """
         Returns the absolute row ID from an relative row ID
-                
+
         :param rowID: Relative row ID
         :type rowID: int
         :return: Absolute row ID
@@ -395,7 +409,7 @@ class ExcelExtractor:
     def getRelativeRowID(self, rowID):
         """
         Returns the relative row ID from an absolute row ID
-                
+
         :param rowID: Absolute row ID
         :type rowID: int
         :return: Absolute row ID
@@ -407,7 +421,7 @@ class ExcelExtractor:
     def getColumnFromHeader(self, header):
         """
         Gets the column ID from an header
-                
+
         :param header: Header ID
         :type header: string
         :return: Column ID or None if the header doesn't exist
@@ -422,28 +436,31 @@ class ExcelExtractor:
     def setRowValue(self, rowID, data):
         """
         Sets the data of a row
-        
+
         Sets the data of the given row.
         Input is an dict of an key: value pair with headerName: newValue
-        
+
         :param rowID: Relative row ID
         :type rowID: int
-        :param data: New row data 
+        :param data: New row data
         :type data: dict
         """
 
-        row = self.getRowFromID(rowID) #@TODO: implement checks
-        for k,v in self.header.items():
+        row = self.getRowFromID(rowID)  # @TODO: implement checks
+        for k, v in self.header.items():
             if v[0] in data.keys():
                 row[v[1].col_idx-1].value = data[v[0]]
+                row[v[1].col_idx-1].alignment = Alignment(wrapText=True)
+            else:
+                row[v[1].col_idx-1].value = v[3]
                 row[v[1].col_idx-1].alignment = Alignment(wrapText=True)
 
     def getWarnings(self, clean=True):
         """
         Gets the warnings generated by getCellValue()
-        
+
         Gets the warnings as list generated by getCellValue()
-        
+
         :param clean: If set to True cleans the warnings list, defaults to True
         :param clean: bool, optional
         :return: List of all warnings
@@ -457,10 +474,10 @@ class ExcelExtractor:
     def setDataValidatorForHeaderColumn(self, headerID, validatorType, formula, allowBlank=True):
         """
         Sets Datavalidators for specific header row
-        
+
         Sets datavalidators for an header row with an special validation type and an formula
         (validator type is only list supported)
-        
+
         :param headerID: ID of the header (name)
         :type headerID: string
         :param validatorType: validation type (only list supported at the moment)
@@ -484,9 +501,9 @@ class ExcelExtractor:
     def addValidatorList(self, validatorList):
         """
         Adds an extra worksheet for data validation
-        
+
         A worksheet with the name 'validatorLists' will be created to store lists for the validator
-        
+
         @TODO: Check for existing validators = validatorList
 
         :param validatorList: list to write to validatorLists
@@ -509,12 +526,10 @@ class ExcelExtractor:
             i += 1
         return 'dropdown!$%s$%s:$%s$%s' % (cell.get_column_letter(lastIndex), 1, cell.get_column_letter(lastIndex), i-1)
 
-
     def addValidatorToCells(self, headerID):
         """
         Adds the registered validators to the workbook
-        
-        
+
         :param headerID: ID of the header
         :type headerID: string
         :raises KeyError: Raises if headerID not found in the headers
@@ -532,7 +547,7 @@ class ExcelExtractor:
 
     def addFilter(self):
         """
-        Adds an filter in the header row        
+        Adds an filter in the header row
         """
         self.sheet.auto_filter.ref = "A%s:%s%s" % (self.headerRow, cell.get_column_letter(self.lastColumn), self.headerRow)
 
