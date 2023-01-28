@@ -5,7 +5,7 @@ description = "ExcelExtractor is an module to handle Excel documents in a normal
 license = "Apache-2.0"
 authors = ["dcfSec <contributor@dcfsec.com>"]
 readme = "README.md"
-repository = "https://github.com/dcfSec/SecurityRatConnector"
+repository = "https://github.com/dcfSec/ExcelExtractor"
 packages = [
     { include = "excelextractor" },
 ]
